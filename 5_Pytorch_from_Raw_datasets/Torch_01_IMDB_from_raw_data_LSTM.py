@@ -1,24 +1,10 @@
-!pip install -U torchtext==0.10.0
+'''
+A. Data Engineering
+'''
 
-import torch
-from torchtext.legacy import data
-from torchtext.legacy import datasets
-import torch.nn.functional as F
-
-import random
-import torch.nn as nn
-import numpy as np
-from sklearn.model_selection import train_test_split    
-
-SEED = 1234
-
-random.seed(SEED)
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-torch.backends.cudnn.deterministic = True
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
+'''
+D1. Import IMDB Raw Dataset from Auther's gdrive
+'''
 
 !pip install --upgrade --no-cache-dir gdown
 
@@ -34,12 +20,42 @@ output_name = 'IMDB_Dataset.csv'
 gdown.download(google_path+file_id,output_name,quiet=False)
 #https://drive.google.com/file/d/1tqZpPvvyluyu7VVvk99tKpJd4cIkS4yi/view?usp=sharing
 
+'''
+D2. Install torchtext Libraries
+'''
+!pip install -U torchtext==0.10.0
+
+'''
+D3. Import Libraries for Data Engineering
+'''
+
+import torch
+from torchtext.legacy import data
+from torchtext.legacy import datasets
+# import torch.nn.functional as F
+
 import re
+import numpy as np
+from sklearn.model_selection import train_test_split    
 
-# 1. Tokenizer Install & import
-# Keras Tokenizer는 tensorflow 2.X 에서 기본으로 제공하는 tokenizer이며, word level tokenizer이다. 이는 별도의 설치가 필요 없다.
+import random
+SEED = 1234
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.backends.cudnn.deterministic = True
 
-# 2. Copy or load raw data to Colab
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(device)
+
+'''
+D4. Tokenizer Install & import
+''' 
+# Spacy Tokenizer is default. So, You are no need to install it.
+
+'''
+D5. Load and modifiy to pandas dataframe
+'''
 import pandas as pd
 
 pd.set_option('display.max_colwidth', 100)
@@ -49,15 +65,13 @@ dataset_df = pd.read_csv('/content/IMDB_Dataset.csv')
 
 print(len(dataset_df))
 
-# dataset_df = dataset_df.loc[:, 'SRC':'TRG']
-    
 dataset_df.head()
 
-dataset_df.rename(columns = {'review':'document', 'sentiment':'label'}, inplace = True)
+dataset_df.rename(columns = {'review':'SRC', 'sentiment':'TRG'}, inplace = True)
 dataset_df.head()
 
-dataset_df['label'] = dataset_df['label'].str.replace('positive','1')
-dataset_df['label'] = dataset_df['label'].str.replace('negative','0')
+dataset_df['TRG'] = dataset_df['TRG'].str.replace('positive','1')
+dataset_df['TRG'] = dataset_df['TRG'].str.replace('negative','0')
 dataset_df.head()
 
 # dataset_df['TRG'] = dataset_df['TRG'].astype(int)
@@ -65,8 +79,9 @@ dataset_df.head()
 # print(TRG_df[:10])
 # len(TRG_df)
 
-# 5. Preprocess and build list
-
+'''
+D6. Preprocess and build list
+'''
 def preprocess_func(sentence):
     sentence = sentence.lower().strip()
     # creating a space between a word and the punctuation following it
@@ -94,11 +109,14 @@ def preprocess_func(sentence):
     sentence = re.sub(r"'bout", "about", sentence)
     # replacing everything with space except (a-z, A-Z, ".", "?", "!", ",")
     sentence = re.sub(r"[^a-zA-Z?.!,]+", " ", sentence)
-    sentence = sentence.strip()  
+    sentence = sentence.strip()
     return sentence
 
-dataset_df['document'] = dataset_df['document'].apply(preprocess_func)
+dataset_df['SRC'] = dataset_df['SRC'].apply(preprocess_func)
 
+'''
+D7. Split Data
+'''
 train_data, test_data = train_test_split(dataset_df, test_size=0.2, random_state=32)
 valid_data, test_data = train_test_split(test_data, test_size=0.2, random_state=32)
 
@@ -109,28 +127,46 @@ print(train_data.shape)
 print(valid_data.shape)
 print(test_data.shape)
 
-
+'''
+D8. Tokenizer define
+'''
 
 TEXT = data.Field(tokenize = 'spacy',
                   tokenizer_language = 'en',
                   batch_first = True, fix_length= 300)
 
-# TEXT = data.Field(sequential=True, use_vocab=True, tokenize=tokenizer.morphs, lower=False, batch_first=True, fix_length=20)
 LABEL = data.LabelField(dtype = torch.float)
 
+'''
+D9. Tokenizer test
+# PASS
+'''
+
+'''
+D10. Pad sequence
+# PASS
+'''
+
+'''
+D11. Convert dataset
+'''
 def convert_dataset(input_data, text, label):
     list_of_example = [data.Example.fromlist(row.tolist(), fields=[('text', text), ('label', label)])  for _, row in input_data.iterrows()]
     dataset = data.Dataset(examples=list_of_example, fields=[('text', text), ('label', label)])
     return dataset
 
-train_data = convert_dataset(train_data,TEXT,LABEL)
+train_data = convert_dataset(train_data, TEXT, LABEL)
 valid_data = convert_dataset(valid_data, TEXT, LABEL)
-test_data = convert_dataset(test_data, TEXT, LABEL)
+test_data  = convert_dataset(test_data, TEXT, LABEL)
 
 print(f'Number of training examples   : {len(train_data)}')
 print(f'Number of validation examples : {len(valid_data)}')
 print(f'Number of testing examples    : {len(test_data)}')
 
+
+'''
+D12. Build vocaburary
+'''
 MAX_VOCAB_SIZE = 20000
 
 TEXT.build_vocab(train_data, max_size = MAX_VOCAB_SIZE)
@@ -146,6 +182,19 @@ print(TEXT.vocab.itos[:10])
 
 print(LABEL.vocab.stoi)
 
+'''
+D13. Dataload with Iterator
+# PASS
+'''
+
+'''
+D14. Data type define
+# PASS
+'''
+
+'''
+D15. Dataload with Iterator
+'''
 BATCH_SIZE = 64
 
 train_iterator, valid_iterator, test_iterator = data.Iterator.splits(
@@ -158,6 +207,27 @@ print('Number of minibatch for training dataset   : {}'.format(len(train_iterato
 print('Number of minibatch for validation dataset : {}'.format(len(valid_iterator)))
 print('Number of minibatch for testing dataset    : {}'.format(len(test_iterator)))
 
+'''
+B. Model Engineering
+'''
+
+'''
+M1. Import Libraries for Model Engineering
+'''
+import torch.nn as nn
+
+
+'''
+M2. Set Hyperparameters
+'''
+embedding_dim = 256
+hidden_units = 128
+EPOCHS = 50
+learning_rate = 5e-4
+
+'''
+M4. Build NN model
+'''
 class LSTM(nn.Module):
     def __init__(self, vocab_size, hidden_dim, output_dim, embedding_dim, dropout):
         super().__init__()
@@ -166,8 +236,8 @@ class LSTM(nn.Module):
         self.linear = nn.Linear(hidden_dim, output_dim)
         self.dropout = nn.Dropout(dropout)
         
-    def forward(self, x):
-        embedded = self.dropout(self.embedding(x))
+    def forward(self, text):
+        embedded = self.dropout(self.embedding(text))
         output, _ = self.rnn(embedded)
         output = self.linear(output[:, -1, :])
         return output
@@ -183,13 +253,23 @@ def count_parameters(model):
 
 print(f'The model has {count_parameters(model):,} trainable parameters')
 
+'''
+M5. Optimizer
+'''
 import torch.optim as optim
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+'''
+M6. Define Loss Function
+'''
 criterion = nn.BCEWithLogitsLoss()
 
 model = model.to(device)
 criterion = criterion.to(device)
 
+'''
+M7. Define Accuracy Function
+'''
 def binary_accuracy(preds, target):
     '''
     from https://github.com/bentrevett/pytorch-sentiment-analysis/blob/master/1%20-%20Simple%20Sentiment%20Analysis.ipynb
@@ -206,6 +286,9 @@ def binary_accuracy(preds, target):
     acc = correct.sum() / len(correct)
     return acc
 
+'''
+M8. Define Training Function
+'''
 def train(model, iterator, optimizer, criterion):
     
     epoch_loss = 0
@@ -221,16 +304,16 @@ def train(model, iterator, optimizer, criterion):
         # batch of sentences인 batch.text를 model에 입력
         predictions = model(batch.text).squeeze(1)
         
-        # prediction결과와 batch.label을 비교하여 loss값 계산 
+        # Calculate the loss value by comparing the prediction result with batch.label 
         loss = criterion(predictions, batch.label)
 
         # Accuracy calculation
         acc = binary_accuracy(predictions, batch.label)
-
-        # backward()를 사용하여 역전파 수행
+        
+        # Backpropagation using backward()
         loss.backward()
 
-        # 최적화 알고리즘을 사용하여 parameter를 update
+        # Update the parameters using the optimization algorithm
         optimizer.step()
         
         epoch_loss += loss.item()
@@ -238,6 +321,9 @@ def train(model, iterator, optimizer, criterion):
         
     return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
+'''
+M9. Define Validation / Test Function
+'''
 def evaluate(model, iterator, criterion):
     
     epoch_loss = 0
@@ -270,11 +356,12 @@ def epoch_time(start_time, end_time):
     elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
     return elapsed_mins, elapsed_secs
 
-N_EPOCHS = 10
-
 best_valid_loss = float('inf')
 
-for epoch in range(N_EPOCHS):
+'''
+M10. Episode / each step Process
+'''
+for epoch in range(EPOCHS):
 
     start_time = time.time()
     
@@ -293,6 +380,9 @@ for epoch in range(N_EPOCHS):
     print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
     print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
 
+'''
+M11. Assess model performance (Test step)
+'''
 model.load_state_dict(torch.load('tut4-model.pt'))
 
 test_loss, test_acc = evaluate(model, test_iterator, criterion)
@@ -302,6 +392,9 @@ print(f'Test Loss: {test_loss:.3f} | Test Acc: {test_acc*100:.2f}%')
 import torch
 model.load_state_dict(torch.load('tut4-model.pt'))
 
+'''
+M12. [Opt] Training result test for Code Engineering
+'''
 import spacy
 nlp = spacy.load('en_core_web_sm')
 
@@ -328,7 +421,7 @@ for idx in range(len(examples)) :
     pred = predict_sentiment(model,sentence)
     print("\n",sentence)
     if pred >= 0.5 :
-        print(f">>>긍정 리뷰입니다. ({pred : .2f})")
+        print(f">>>This is a positive review. ({pred : .2f})")
     else:
-        print(f">>>부정 리뷰입니다.({pred : .2f})")
+        print(f">>>This is a negative review.({pred : .2f})")
 
