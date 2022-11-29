@@ -1,16 +1,25 @@
+'''
+A. Data Engineering
+'''
+
+'''
+D1. Install torchtext Libraries
+'''
 !pip install -U torchtext==0.10.0
+
+'''
+D2. Import Libraries for Data Engineering
+'''
 
 import torch
 from torchtext.legacy import data
 from torchtext.legacy import datasets
-import torch.nn.functional as F
+# import torch.nn.functional as F
 
-import random
-import torch.nn as nn
 import numpy as np
 
+import random
 SEED = 1234
-
 random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
@@ -19,23 +28,52 @@ torch.backends.cudnn.deterministic = True
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(device)
 
+'''
+D3. Tokenizer Install & import
+''' 
+# Spacy Tokenizer is default. So, You are no need to install it.
+
+'''
+D4. Tokenizer define
+'''
+
 TEXT = data.Field(tokenize = 'spacy',
                   tokenizer_language = 'en',
                   batch_first = True)
 
 LABEL = data.LabelField(dtype = torch.float)
 
+'''
+D5. Tokenizer test
+# PASS
+'''
+
+'''
+D6. Pad sequence
+# PASS
+'''
+
+'''
+D7. Import dataset
+'''
 train_data, test_data = datasets.IMDB.splits(TEXT, LABEL)
 
 
 print(vars(train_data.examples[0]))
 
+'''
+D8. Split
+'''
 train_data, valid_data = train_data.split(random_state = random.seed(SEED))
 
 print(f'Number of training examples   : {len(train_data)}')
 print(f'Number of validation examples : {len(valid_data)}')
 print(f'Number of testing examples    : {len(test_data)}')
 
+
+'''
+D9. Build vocaburary
+'''
 MAX_VOCAB_SIZE = 20000
 
 TEXT.build_vocab(train_data, max_size = MAX_VOCAB_SIZE)
@@ -51,6 +89,19 @@ print(TEXT.vocab.itos[:10])
 
 print(LABEL.vocab.stoi)
 
+'''
+D10. Dataload with Iterator
+# PASS
+'''
+
+'''
+D11. Data type define
+# PASS
+'''
+
+'''
+D12. Dataload with BucketIterator
+'''
 BATCH_SIZE = 64
 
 train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits(
@@ -62,6 +113,27 @@ print('Number of minibatch for training dataset   : {}'.format(len(train_iterato
 print('Number of minibatch for validation dataset : {}'.format(len(valid_iterator)))
 print('Number of minibatch for testing dataset    : {}'.format(len(test_iterator)))
 
+'''
+B. Model Engineering
+'''
+
+'''
+M1. Import Libraries for Model Engineering
+'''
+import torch.nn as nn
+
+
+'''
+M2. Set Hyperparameters
+'''
+embedding_dim = 256
+hidden_units = 128
+EPOCHS = 50
+learning_rate = 5e-4
+
+'''
+M4. Build NN model
+'''
 class LSTM(nn.Module):
     def __init__(self, vocab_size, hidden_dim, output_dim, embedding_dim, dropout):
         super().__init__()
@@ -70,8 +142,8 @@ class LSTM(nn.Module):
         self.linear = nn.Linear(hidden_dim, output_dim)
         self.dropout = nn.Dropout(dropout)
         
-    def forward(self, x):
-        embedded = self.dropout(self.embedding(x))
+    def forward(self, text):
+        embedded = self.dropout(self.embedding(text))
         output, _ = self.rnn(embedded)
         output = self.linear(output[:, -1, :])
         return output
@@ -87,13 +159,23 @@ def count_parameters(model):
 
 print(f'The model has {count_parameters(model):,} trainable parameters')
 
+'''
+M5. Optimizer
+'''
 import torch.optim as optim
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+'''
+M6. Define Loss Function
+'''
 criterion = nn.BCEWithLogitsLoss()
 
 model = model.to(device)
 criterion = criterion.to(device)
 
+'''
+M7. Define Accuracy Function
+'''
 def binary_accuracy(preds, target):
     '''
     from https://github.com/bentrevett/pytorch-sentiment-analysis/blob/master/1%20-%20Simple%20Sentiment%20Analysis.ipynb
@@ -110,6 +192,9 @@ def binary_accuracy(preds, target):
     acc = correct.sum() / len(correct)
     return acc
 
+'''
+M8. Define Training Function
+'''
 def train(model, iterator, optimizer, criterion):
     
     epoch_loss = 0
@@ -125,16 +210,16 @@ def train(model, iterator, optimizer, criterion):
         # batch of sentences인 batch.text를 model에 입력
         predictions = model(batch.text).squeeze(1)
         
-        # prediction결과와 batch.label을 비교하여 loss값 계산 
+        # Calculate the loss value by comparing the prediction result with batch.label 
         loss = criterion(predictions, batch.label)
 
         # Accuracy calculation
         acc = binary_accuracy(predictions, batch.label)
-
-        # backward()를 사용하여 역전파 수행
+        
+        # Backpropagation using backward()
         loss.backward()
 
-        # 최적화 알고리즘을 사용하여 parameter를 update
+        # Update the parameters using the optimization algorithm
         optimizer.step()
         
         epoch_loss += loss.item()
@@ -142,6 +227,9 @@ def train(model, iterator, optimizer, criterion):
         
     return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
+'''
+M9. Define Validation / Test Function
+'''
 def evaluate(model, iterator, criterion):
     
     epoch_loss = 0
@@ -174,11 +262,12 @@ def epoch_time(start_time, end_time):
     elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
     return elapsed_mins, elapsed_secs
 
-N_EPOCHS = 10
-
 best_valid_loss = float('inf')
 
-for epoch in range(N_EPOCHS):
+'''
+M10. Episode / each step Process
+'''
+for epoch in range(EPOCHS):
 
     start_time = time.time()
     
@@ -197,6 +286,9 @@ for epoch in range(N_EPOCHS):
     print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
     print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
 
+'''
+M11. Assess model performance (Test step)
+'''
 model.load_state_dict(torch.load('tut4-model.pt'))
 
 test_loss, test_acc = evaluate(model, test_iterator, criterion)
@@ -206,6 +298,9 @@ print(f'Test Loss: {test_loss:.3f} | Test Acc: {test_acc*100:.2f}%')
 import torch
 model.load_state_dict(torch.load('tut4-model.pt'))
 
+'''
+M12. [Opt] Training result test for Code Engineering
+'''
 import spacy
 nlp = spacy.load('en_core_web_sm')
 
@@ -232,7 +327,7 @@ for idx in range(len(examples)) :
     pred = predict_sentiment(model,sentence)
     print("\n",sentence)
     if pred >= 0.5 :
-        print(f">>>긍정 리뷰입니다. ({pred : .2f})")
+        print(f">>>This is a positive review. ({pred : .2f})")
     else:
-        print(f">>>부정 리뷰입니다.({pred : .2f})")
+        print(f">>>This is a negative review.({pred : .2f})")
 
