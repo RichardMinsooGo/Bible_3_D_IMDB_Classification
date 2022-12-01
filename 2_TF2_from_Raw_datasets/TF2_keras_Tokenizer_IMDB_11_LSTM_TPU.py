@@ -1,3 +1,11 @@
+'''
+A. Data Engineering
+'''
+
+'''
+1. Import IMDB Raw Dataset from Auther's gdrive
+'''
+
 !pip install --upgrade --no-cache-dir gdown
 
 from IPython.display import clear_output 
@@ -12,11 +20,18 @@ output_name = 'IMDB_Dataset.csv'
 gdown.download(google_path+file_id,output_name,quiet=False)
 #https://drive.google.com/file/d/1tqZpPvvyluyu7VVvk99tKpJd4cIkS4yi/view?usp=sharing
 
+'''
+2. Import Libraries for Data Engineering
+'''
 import re
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import unicodedata
+
+'''
+T. TPU Initialization
+'''
 
 import tensorflow as tf
 
@@ -36,20 +51,19 @@ else:
 print("REPLICAS: {}".format(strategy.num_replicas_in_sync))
 
 print("Tensorflow version {}".format(tf.__version__))
-tf.random.set_seed(1234)
+import random
+SEED = 1234
+tf.random.set_seed(SEED)
 AUTO = tf.data.experimental.AUTOTUNE
 
-# 1. Tokenizer Install & import
-# Keras Tokenizer는 tensorflow 2.X 에서 기본으로 제공하는 tokenizer이며, word level tokenizer이다. 이는 별도의 설치가 필요 없다.
+'''
+3. Tokenizer Install & import
+''' 
+# Keras Tokenizer is a tokenizer provided by default in tensorflow 2.X and is a word level tokenizer. It does not require a separate installation.
 
-# 2. Copy or load raw data to Colab
-max_len = 300
-BATCH_SIZE  = 128
-BUFFER_SIZE = 20000
-
-import urllib3
-import zipfile
-import shutil
+'''
+4. Load and modifiy to pandas dataframe
+'''
 import pandas as pd
 
 pd.set_option('display.max_colwidth', 100)
@@ -59,8 +73,6 @@ dataset_df = pd.read_csv('/content/IMDB_Dataset.csv')
 
 print(len(dataset_df))
 
-# dataset_df = dataset_df.loc[:, 'SRC':'TRG']
-    
 dataset_df.head()
 
 dataset_df.rename(columns = {'review':'SRC', 'sentiment':'TRG'}, inplace = True)
@@ -78,7 +90,9 @@ print(TRG_df[:10])
 
 len(TRG_df)
 
-# 5. Preprocess and build list
+'''
+5. Preprocess and build list
+'''
 raw_src = []
 for sentence in dataset_df['SRC']:
     sentence = sentence.lower().strip()
@@ -112,7 +126,9 @@ for sentence in dataset_df['SRC']:
 
 print(raw_src[:10])
 
-# 6. Tokenizer and Vocab define
+'''
+6. Tokenizer and Vocab define
+'''
 SRC_df = pd.DataFrame(raw_src)
 
 SRC_df.rename(columns={0: "SRC"}, errors="raise", inplace=True)
@@ -135,7 +151,9 @@ vocab_size = len(SRC_tokenizer.word_index) + 1
 
 print('Encoder 단어 집합의 크기 :',vocab_size)
 
-# 7. Tokenizer test
+'''
+7. Tokenizer test
+'''
 lines = [
   "It is winter and the weather is very cold.",
   "Will this Christmas be a white Christmas?",
@@ -148,10 +166,15 @@ for line in lines:
     print("txt_2_ids :", txt_2_ids)
     print("ids_2_txt :", ids_2_txt[0],"\n")
 
-# 8. Tokenize    
+'''
+8. Tokenize  
+''' 
 # 토큰화 / 정수 인코딩 / 시작 토큰과 종료 토큰 추가 / 패딩
 tokenized_inputs  = SRC_tokenizer.texts_to_sequences(src_sentence)
 
+'''
+9. Explore the tokenized datasets.
+'''
 len_result = [len(s) for s in tokenized_inputs]
 
 print('Maximum length of review : {}'.format(np.max(len_result)))
@@ -163,15 +186,22 @@ plt.subplot(1,2,2)
 plt.hist(len_result, bins=50)
 plt.show()
 
-# 9. Pad sequences
-# 패딩
-tkn_sources = tf.keras.preprocessing.sequence.pad_sequences(tokenized_inputs,  maxlen=max_len, padding='post', truncating='post')
+'''
+10. Pad sequences
+'''
 
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+max_len = 300
+tkn_sources = pad_sequences(tokenized_inputs,  maxlen=max_len, padding='post', truncating='post')
 
-# 10. Data type define
+'''
+11. Data type define
+'''
 tkn_sources = tf.cast(tkn_sources, dtype=tf.int64)
 
-# 11. Check tokenized data
+'''
+12. Split Data
+'''
 print('질문 데이터의 크기(shape) :', tkn_sources.shape)
 
 # 0번째 샘플을 임의로 출력
@@ -184,39 +214,85 @@ y_valid = TRG_df[25000:45000]
 X_test  = tkn_sources[45000:]
 y_test  = TRG_df[45000:]
 
-from tensorflow.keras.preprocessing.sequence import pad_sequences
+print('Number of minibatch for training dataset   : {}'.format(len(X_train)))
+print('Number of minibatch for validation dataset : {}'.format(len(X_valid)))
+print('Number of minibatch for testing dataset    : {}'.format(len(X_test)))
+
+'''
+B. Model Engineering
+'''
+
+'''
+13. Import Libraries for Model Engineering
+'''
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, LSTM, Embedding
+from tensorflow.keras import optimizers
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 
 from tensorflow.keras.models import load_model
 
+'''
+14. Set Hyperparameters
+'''
 embedding_dim = 256
 hidden_units = 128
+EPOCHS = 20
+learning_rate = 5e-4
 
 # initialize and compile model within strategy scope
 with strategy.scope():
+    '''
+    15. Build NN model
+    '''
     model = Sequential()
     model.add(Embedding(vocab_size, embedding_dim))
     model.add(LSTM(hidden_units, dropout=0.2, recurrent_dropout=0.2))
     model.add(Dense(1, activation='sigmoid'))
 
-    model.compile(optimizer='adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
+    '''
+    16. Optimizer
+    '''
+    optimizer = optimizers.Adam(learning_rate=learning_rate)
+
+    '''
+    17. Model Compilation - model.compile
+    '''
+    # model.compile(optimizer='adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
+    model.compile(optimizer=optimizer, loss = 'binary_crossentropy', metrics = ['accuracy'])
 
 model.summary()
+
+'''
+18. EarlyStopping
+'''
 es = EarlyStopping(monitor = 'val_loss', mode = 'min', verbose = 1, patience = 8)
+
+'''
+19. ModelCheckpoint
+'''
 mc = ModelCheckpoint('best_model.h5', monitor = 'val_accuracy', mode = 'max', verbose = 1, save_best_only = True)
-history = model.fit(X_train, y_train, epochs = 20, validation_data = (X_valid, y_valid), callbacks=[es, mc])
 
+'''
+20. Train and Validation - `model.fit`
+'''
+history = model.fit(X_train, y_train, epochs = EPOCHS, validation_data = (X_valid, y_valid), callbacks=[es, mc])
+
+'''
+21. Assess model performance
+'''
 loaded_model = load_model('best_model.h5')
-print("\n 테스트 정확도: %.4f" % (loaded_model.evaluate(X_test, y_test)[1]))
+print("\n Test Accuracy: %.4f" % (loaded_model.evaluate(X_test, y_test)[1]))
 
+'''
+22. [Opt] Plot Loss and Accuracy
+'''
 history_dict = history.history
 history_dict.keys()
 
-acc = history_dict['accuracy']
-val_acc = history_dict['val_accuracy']
-loss = history_dict['loss']
+acc      = history_dict['accuracy']
+val_acc  = history_dict['val_accuracy']
+loss     = history_dict['loss']
 val_loss = history_dict['val_loss']
 
 epochs = range(1, len(acc) + 1)
@@ -242,6 +318,9 @@ plt.legend(loc='lower right')
 
 plt.show()
 
+'''
+23. [Opt] Training result test for Code Engineering
+'''
 def sentiment_predict(new_sentence):
     # 알파벳과 숫자를 제외하고 모두 제거 및 알파벳 소문자화
     new_sentence = re.sub('[^0-9a-zA-Z ]', '', new_sentence).lower()
