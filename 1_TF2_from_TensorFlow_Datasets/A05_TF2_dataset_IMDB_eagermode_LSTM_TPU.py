@@ -1,58 +1,56 @@
 '''
-A. Data Engineering
+Data Engineering
 '''
 
 '''
-1. Import Libraries for Data Engineering
+D01. Import Libraries for Data Engineering
 '''
 import re
 import numpy as np
 import matplotlib.pyplot as plt
-
-'''
-2. Import IMDB Dataset from library
-'''
-from tensorflow.keras.datasets import imdb
-
-'''
-T. TPU Initialization
-'''
 import tensorflow as tf
 
-try:
-    tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
-    print('Running on TPU {}'.format(tpu.cluster_spec().as_dict()['worker']))
-except ValueError:
-    tpu = None
+print("Tensorflow version {}".format(tf.__version__))
+import random
+SEED = 1234
+tf.random.set_seed(SEED)
+AUTO = tf.data.experimental.AUTOTUNE
 
-if tpu:
-    tf.config.experimental_connect_to_cluster(tpu)
-    tf.tpu.experimental.initialize_tpu_system(tpu)
-    strategy = tf.distribute.experimental.TPUStrategy(tpu)
-else:
-    strategy = tf.distribute.get_strategy()
+'''
+D02. Import IMDB Dataset from library
+'''
 
-print("REPLICAS: {}".format(strategy.num_replicas_in_sync))
+from tensorflow.keras.datasets import imdb
 
 print('Loading data...')
 vocab_size = 20000
-(X_train, y_train), (X_test, y_test) = imdb.load_data(num_words=vocab_size)
-# (X_train, y_train), (X_test, y_test) = imdb.load_data()
+(X_train, Y_train), (X_test, Y_test) = imdb.load_data(num_words=vocab_size)
+# (X_train, Y_train), (X_test, Y_test) = imdb.load_data()
 
 '''
-3. Explore the several features of datasets.
+D03. [PASS] Tokenizer Install & import
+''' 
+# Keras Tokenizer is a tokenizer provided by default in tensorflow 2.X and is a word level tokenizer. It does not require a separate installation.
+
+'''
+D4. Define Hyperparameters for Data Engineering
+'''
+max_len = 300  # cut texts after this number of words (among top vocab_size most common words)
+
+'''
+D05. Explore the several features of datasets.
 '''
 print('Number of reviews for training : {}'.format(len(X_train)))
 print('Number of reviews for tesing   : {}'.format(len(X_test)))
-num_classes = len(set(y_train))
+num_classes = len(set(Y_train))
 print('Number of Classes : {}'.format(num_classes))
 
-unique_elements, counts_elements = np.unique(y_train, return_counts=True)
+unique_elements, counts_elements = np.unique(Y_train, return_counts=True)
 print("Frequency for each label:")
 print(np.asarray((unique_elements, counts_elements)))
 
 '''
-4. Tokenizer and Vocab define
+D06. Tokenizer and Vocab define
 '''
 word_to_index = imdb.get_word_index()
 index_to_word={}
@@ -70,8 +68,9 @@ print(' '.join([index_to_word[index] for index in X_train[0]]))
 print(' '.join([index_to_word[index] for index in X_train[0][:50]]))
 
 '''
-5. Tokenizer test
+D11. Tokenizer test
 '''
+
 lines = [
   "It is winter and the weather is very cold.",
   "Will this Christmas be a white Christmas?",
@@ -96,8 +95,13 @@ for line in lines:
     print("ids_2_txt :", ids_2_txt,"\n")
 
 '''
-6. Explore the tokenized datasets.
+D12. [PASS] Tokenize
 '''
+
+'''
+D13. [EDA] Explore the tokenized datasets
+'''
+
 len_result = [len(s) for s in X_train]
 
 print('Maximum length of review : {}'.format(np.max(len_result)))
@@ -110,51 +114,64 @@ plt.hist(len_result, bins=50)
 plt.show()
 
 print(X_train[0])
-print(y_train[0])
-
-batch_size = 32
+print(Y_train[0])
 
 '''
-7. Split Data
+D14. Pad sequences
 '''
-# print('Loading data...')
-# (X_train, y_train), (X_test, y_test) = imdb.load_data(num_words=vocab_size)
+
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+X_train = pad_sequences(X_train, maxlen=max_len, padding='post', truncating='post')
+# X_valid = pad_sequences(X_valid, maxlen=max_len)
+X_test  = pad_sequences(X_test, maxlen=max_len, padding='post', truncating='post')
+
+'''
+D15. [PASS] Data type define
+'''
+# For IMDB dataset set, it is not required.
+
+'''
+D16. [EDA] Explore the Tokenized datasets
+'''
+print('Size of source language data(shape) :', X_train.shape)
+
+# Randomly output the 0th sample
+print(X_train[0])
+
+'''
+D17. Split Data
+'''
 
 X_valid = X_test[:20000]
-y_valid = y_test[:20000]
+Y_valid = Y_test[:20000]
 
 X_test = X_test[20000:]
 X_pred = X_test
-y_test = y_test[20000:]
+Y_test = Y_test[20000:]
 
-print(len(X_train), 'train sequences')
-print(len(X_valid), 'valid sequences')
-print(len(X_test) , 'test sequences')
+print('Number of sequences for training dataset   : {}'.format(len(X_train)))
+print('Number of sequences for validation dataset : {}'.format(len(X_valid)))
+print('Number of sequences for testing dataset    : {}'.format(len(X_test)))
 
 '''
-8. Pad sequences
+D18. [PASS] Build dataset
 '''
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-
-max_len = 300  # cut texts after this number of words (among top vocab_size most common words)
-X_train = pad_sequences(X_train, maxlen=max_len)
-X_valid = pad_sequences(X_valid, maxlen=max_len)
-X_test  = pad_sequences(X_test, maxlen=max_len)
-
-# 10. Data type define
-# For IMDB dataset set, it is not required.
-
-# 11. Build dataset
 # For eager mode, it is done at the "model.fit"
 
 '''
-B. Model Engineering
+D19. [PASS] Define some useful parameters for further use
 '''
 
 '''
-9. Import Libraries for Model Engineering
+Model Engineering
 '''
-from tensorflow.keras.models import Sequential
+
+'''
+M01. Import Libraries for Model Engineering
+'''
+
+from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import Dense, LSTM, Embedding
 from tensorflow.keras import optimizers
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
@@ -162,59 +179,91 @@ from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.models import load_model
 
 '''
-10. Set Hyperparameters
+M02. TPU Initialization
+'''
+
+import tensorflow as tf
+
+try:
+    tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
+    print('Running on TPU {}'.format(tpu.cluster_spec().as_dict()['worker']))
+except ValueError:
+    tpu = None
+
+if tpu:
+    tf.config.experimental_connect_to_cluster(tpu)
+    tf.tpu.experimental.initialize_tpu_system(tpu)
+    strategy = tf.distribute.experimental.TPUStrategy(tpu)
+else:
+    strategy = tf.distribute.get_strategy()
+
+print("REPLICAS: {}".format(strategy.num_replicas_in_sync))
+
+'''
+M03. Define Hyperparameters for Model Engineering
 '''
 embedding_dim = 256
-hidden_units = 128
+hidden_size = 128
+output_dim = 1  # output layer dimensionality = num_classes
 EPOCHS = 20
+batch_size = 100
 learning_rate = 5e-4
+
+'''
+M04. Open "strategy.scope(  )"
+'''
 
 # initialize and compile model within strategy scope
 with strategy.scope():
     '''
-    11. Build NN model
+    M05. Build NN model
     '''
     model = Sequential()
     model.add(Embedding(vocab_size, embedding_dim))
-    model.add(LSTM(hidden_units, dropout=0.2, recurrent_dropout=0.2))
-    model.add(Dense(1, activation='sigmoid'))
+    model.add(LSTM(hidden_size, dropout=0.2, recurrent_dropout=0.2))
+    model.add(Dense(output_dim, activation='sigmoid'))
 
     '''
-    12. Optimizer
+    M06. Optimizer
     '''
     optimizer = optimizers.Adam(learning_rate=learning_rate)
 
     '''
-    13. Model Compilation - model.compile
+    M07. Model Compilation - model.compile
     '''
     # model.compile(optimizer='adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
-    model.compile(optimizer=optimizer, loss = 'binary_crossentropy', metrics = ['accuracy'])
+    model.compile(optimizer=optimizer, loss = 'binary_crossentropy',
+                  metrics = ['accuracy'])
 
 model.summary()
 
 '''
-14. EarlyStopping
+M08. EarlyStopping
 '''
 es = EarlyStopping(monitor = 'val_loss', mode = 'min', verbose = 1, patience = 8)
 
 '''
-15. ModelCheckpoint
+M09. ModelCheckpoint
 '''
 mc = ModelCheckpoint('best_model.h5', monitor = 'val_accuracy', mode = 'max', verbose = 1, save_best_only = True)
 
 '''
-16. Train and Validation - `model.fit`
+M10. Train and Validation - `model.fit`
 '''
-history = model.fit(X_train, y_train, epochs = EPOCHS, validation_data = (X_valid, y_valid), callbacks=[es, mc])
+history = model.fit(X_train, Y_train, epochs = EPOCHS,
+                    batch_size=batch_size,
+                    validation_data = (X_valid, Y_valid),
+                    verbose=1,
+                    callbacks=[es, mc])
 
 '''
-17. Assess model performance
+M11. Assess model performance
 '''
 loaded_model = load_model('best_model.h5')
-print("\n 테스트 정확도: %.4f" % (loaded_model.evaluate(X_test, y_test)[1]))
+print("\n Test Accuracy: %.4f" % (loaded_model.evaluate(X_test, Y_test)[1]))
 
 '''
-18. [Opt] Plot Loss and Accuracy
+M12. [Opt] Plot Loss and Accuracy
 '''
 history_dict = history.history
 history_dict.keys()
@@ -248,7 +297,7 @@ plt.legend(loc='lower right')
 plt.show()
 
 '''
-19. [Opt] Training result test for Code Engineering
+M13. [Opt] Training result test for Code Engineering
 '''
 def sentiment_predict(new_sentence):
     # 알파벳과 숫자를 제외하고 모두 제거 및 알파벳 소문자화
@@ -281,7 +330,7 @@ for idx in range(10):
     test_input = ' '.join([index_to_word[index] for index in X_pred[idx]])
     print("Test sentence from datasets:\n", test_input)
     sentiment_predict(test_input)
-    if(y_test[idx] > 0.5):
+    if(Y_test[idx] > 0.5):
         print("Ground truth is positive!")
     else:
         print("Ground truth is negative!")
